@@ -1,0 +1,42 @@
+package com.kiddo.remotescreen.server.controller;
+
+import com.kiddo.remotescreen.server.model.DeviceAuthRequestDto;
+import com.kiddo.remotescreen.server.model.DeviceRegisterRequestDto;
+import com.kiddo.remotescreen.server.model.DeviceRegisterResponseDto;
+import com.kiddo.remotescreen.server.model.DeviceRemoteAccessDto;
+import com.kiddo.remotescreen.server.service.DeviceService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/device")
+public class DeviceController {
+
+    private final DeviceService deviceService;
+
+    public DeviceController(DeviceService deviceService) {
+        this.deviceService = deviceService;
+    }
+
+    @PostMapping("/verify")
+    public ResponseEntity<?> verify(@RequestBody DeviceAuthRequestDto request) {
+        boolean isValid = deviceService.verify(request.deviceId(), request.password());
+        return isValid ? ResponseEntity.ok().build()
+                : ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid device credentials");
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<DeviceRegisterResponseDto> register(@RequestBody DeviceRegisterRequestDto request) {
+        String deviceId = deviceService.register(request.password());
+        return ResponseEntity.ok(new DeviceRegisterResponseDto(deviceId));
+    }
+
+    @PutMapping("/remote-access")
+    public ResponseEntity<?> updateRemoteAccess(@RequestBody DeviceRemoteAccessDto dto) {
+        boolean updated = deviceService.setAllowRemote(dto.deviceId(), dto.allowRemote());
+        return updated ? ResponseEntity.ok().build()
+                : ResponseEntity.status(HttpStatus.NOT_FOUND).body("Device not found");
+    }
+
+}
