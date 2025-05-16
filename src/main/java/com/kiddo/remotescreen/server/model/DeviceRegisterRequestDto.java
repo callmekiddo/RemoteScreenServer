@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 
 public record DeviceRegisterRequestDto(
         String password,
-        String deviceName
+        String deviceName,
+        String machineUuid
 ) {}
 

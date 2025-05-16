@@ -8,6 +8,9 @@ public class Device {
     @DynamoDBHashKey(attributeName = "deviceId")
     private String deviceId;
 
+    @DynamoDBAttribute(attributeName = "machineUuid")
+    private String machineUuid;
+
     @DynamoDBAttribute(attributeName = "devicePassword")
     private String devicePassword;
 
@@ -60,5 +63,11 @@ public class Device {
         this.allowRemote = allowRemote;
     }
 
-    // Getters and Setters
+    public String getMachineUuid() {
+        return machineUuid;
+    }
+
+    public void setMachineUuid(String machineUuid) {
+        this.machineUuid = machineUuid;
+    }
 }

@@ -19,10 +19,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
-@ServerEndpoint(value = "/auth/webrtc/{deviceId}")
-public class WebRtcWSServer {
+@ServerEndpoint(value = "/auth/signaling/{deviceId}")
+public class SignalingWSServer {
 
-    private static final Logger log = LoggerFactory.getLogger(WebRtcWSServer.class);
+    private static final Logger log = LoggerFactory.getLogger(SignalingWSServer.class);
 
     private static final Map<String, Session> sessionMap = new ConcurrentHashMap<>();
     private static final ObjectMapper mapper = new ObjectMapper()
@@ -37,10 +37,10 @@ public class WebRtcWSServer {
             Device asPcDevice = deviceService.getDeviceById(deviceId);
             if (asPcDevice != null) {
                 // ✅ Đây là thiết bị PC
-                if (!Boolean.TRUE.equals(asPcDevice.getAllowRemote())) {
-                    session.close(new CloseReason(CloseReason.CloseCodes.VIOLATED_POLICY, "Remote access disabled"));
-                    return;
-                }
+//                if (!Boolean.TRUE.equals(asPcDevice.getAllowRemote())) {
+//                    session.close(new CloseReason(CloseReason.CloseCodes.VIOLATED_POLICY, "Remote access disabled"));
+//                    return;
+//                }
 
                 sessionMap.put(deviceId, session);
                 log.info("✅ PC connected: {}", deviceId);
@@ -57,7 +57,6 @@ public class WebRtcWSServer {
                 }
             }
 
-            // ❌ Android chưa được connect-android hoặc sai
             session.close(new CloseReason(CloseReason.CloseCodes.VIOLATED_POLICY, "Unauthorized Android"));
 
         } catch (Exception e) {
@@ -73,7 +72,6 @@ public class WebRtcWSServer {
         String disconnectedId = null;
 
         try {
-            // Tìm ID bị ngắt kết nối (PC hoặc Android)
             for (Map.Entry<String, Session> entry : sessionMap.entrySet()) {
                 if (entry.getValue().equals(session)) {
                     disconnectedId = entry.getKey();
@@ -90,13 +88,13 @@ public class WebRtcWSServer {
             log.info("🔌 WebSocket closed: {}", disconnectedId);
 
             DeviceService deviceService = SpringContext.getBean(DeviceService.class);
-            List<String> allDeviceIds = deviceService.getAllDeviceIds(); // bạn cần thêm hàm này
+            List<String> allDeviceIds = deviceService.getAllDeviceIds();
 
             for (String deviceId : allDeviceIds) {
                 Device device = deviceService.getDeviceById(deviceId);
                 if (device == null) continue;
 
-                // TH1: Android disconnect (matched as connectedAndroid)
+                // TH1: Android disconnect
                 if (disconnectedId.equals(device.getConnectedAndroid())) {
                     device.setConnectedAndroid(null);
                     deviceService.save(device);
@@ -104,14 +102,14 @@ public class WebRtcWSServer {
                     break;
                 }
 
-                // TH2: PC disconnect (matched as deviceId)
+                // TH2: PC disconnect
                 if (disconnectedId.equals(device.getDeviceId()) && device.getConnectedAndroid() != null) {
-                    String oldAndroid = device.getConnectedAndroid();
+                    String oldAndroid = device.getConnectedAndroid(); // lưu trước khi xóa
                     device.setConnectedAndroid(null);
                     deviceService.save(device);
                     log.info("🧹 PC '{}' disconnected → cleared connectedAndroid '{}'", disconnectedId, oldAndroid);
 
-                    // 🔌 Ngắt luôn Android nếu đang giữ session
+                    // Ngắt kết nối Android nếu còn đang mở
                     Session androidSession = sessionMap.get(oldAndroid);
                     if (androidSession != null && androidSession.isOpen()) {
                         androidSession.close(new CloseReason(
@@ -121,6 +119,7 @@ public class WebRtcWSServer {
                         sessionMap.remove(oldAndroid);
                         log.info("🔌 Android '{}' forcibly disconnected due to PC '{}'", oldAndroid, disconnectedId);
                     }
+                    break;
                 }
             }
 
@@ -129,13 +128,11 @@ public class WebRtcWSServer {
         }
     }
 
-
     @OnError
     public void onError(Session session, Throwable error) {
         String disconnectedId = null;
 
         try {
-            // Xác định ID của session gặp lỗi
             for (Map.Entry<String, Session> entry : sessionMap.entrySet()) {
                 if (entry.getValue().equals(session)) {
                     disconnectedId = entry.getKey();
@@ -153,13 +150,13 @@ public class WebRtcWSServer {
             log.warn("❌ Removed session after error for '{}'", disconnectedId);
 
             DeviceService deviceService = SpringContext.getBean(DeviceService.class);
-            List<String> allDeviceIds = deviceService.getAllDeviceIds(); // same as used in @OnClose
+            List<String> allDeviceIds = deviceService.getAllDeviceIds();
 
             for (String deviceId : allDeviceIds) {
                 Device device = deviceService.getDeviceById(deviceId);
                 if (device == null) continue;
 
-                // Android bị lỗi → remove khỏi PC
+                // TH1: Android bị lỗi → clear khỏi PC
                 if (disconnectedId.equals(device.getConnectedAndroid())) {
                     device.setConnectedAndroid(null);
                     deviceService.save(device);
@@ -167,7 +164,7 @@ public class WebRtcWSServer {
                     break;
                 }
 
-                // PC bị lỗi → remove Android đã gán
+                // TH2: PC bị lỗi → clear Android và ngắt Android WebSocket
                 if (disconnectedId.equals(device.getDeviceId()) && device.getConnectedAndroid() != null) {
                     String oldAndroid = device.getConnectedAndroid();
                     device.setConnectedAndroid(null);
@@ -187,7 +184,6 @@ public class WebRtcWSServer {
                 }
             }
 
-            // Close session safely
             if (session.isOpen()) {
                 session.close(new CloseReason(CloseReason.CloseCodes.UNEXPECTED_CONDITION, "WebSocket error"));
             }
@@ -206,8 +202,39 @@ public class WebRtcWSServer {
             Map<String, Object> messageMap = mapper.readValue(message, new TypeReference<>() {});
             String type = (String) messageMap.get("type");
             String fromUser = (String) messageMap.get("fromUser");
-            String toUser = (String) messageMap.get("toUser");
 
+            // ✅ Xử lý riêng type = "hello"
+            if ("hello".equals(type)) {
+                // ✅ Tìm PC đang kết nối với Android này
+                String pcId = sessionMap.entrySet().stream()
+                        .filter(e -> {
+                            Device pc = SpringContext.getBean(DeviceService.class).getDeviceById(e.getKey());
+                            return pc != null && fromUser.equals(pc.getConnectedAndroid());
+                        })
+                        .map(Map.Entry::getKey)
+                        .findFirst()
+                        .orElse(null);
+
+                if (pcId == null) {
+                    log.warn("❌ No PC found for Android '{}'. Skipping HELLO.", fromUser);
+                    return;
+                }
+
+                Session pcSession = sessionMap.get(pcId);
+                if (pcSession != null && pcSession.isOpen()) {
+                    Map<String, Object> helloMsg = new HashMap<>();
+                    helloMsg.put("type", "hello");
+                    helloMsg.put("fromUser", fromUser);
+
+                    String jsonHello = mapper.writeValueAsString(helloMsg);
+                    pcSession.getBasicRemote().sendText(jsonHello);
+                    log.info("👋 Forwarded HELLO from '{}' → PC '{}'", fromUser, pcId);
+                }
+                return; // ✅ kết thúc tại đây, không xử lý tiếp bên dưới
+            }
+
+            // ⬇️ Xử lý bình thường cho offer, answer, ice_candidate
+            String toUser = (String) messageMap.get("toUser");
             Session targetSession = sessionMap.get(toUser);
             if (targetSession == null) {
                 log.warn("❌ Target session '{}' not found. sessionMap keys: {}", toUser, sessionMap.keySet());

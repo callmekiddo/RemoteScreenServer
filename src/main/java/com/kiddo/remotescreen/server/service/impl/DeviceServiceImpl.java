@@ -2,19 +2,20 @@ package com.kiddo.remotescreen.server.service.impl;
 
 import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBMapper;
 import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBScanExpression;
+import com.amazonaws.services.dynamodbv2.model.AttributeValue;
 import com.kiddo.remotescreen.server.entity.Device;
 import com.kiddo.remotescreen.server.service.DeviceService;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
-import java.util.List;
-import java.util.Random;
-import java.util.UUID;
+import java.util.*;
+import org.slf4j.Logger;
 import java.util.stream.Collectors;
 
 @Service
 public class DeviceServiceImpl implements DeviceService {
-
+    private static final Logger log = LoggerFactory.getLogger(DeviceServiceImpl.class);
     private final DynamoDBMapper dynamoDBMapper;
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -23,19 +24,42 @@ public class DeviceServiceImpl implements DeviceService {
     }
 
     @Override
-    public String register(String password, String deviceName) {
-        String deviceId = generateUniqueDeviceId();
+    public String register(String password, String deviceName, String machineUuid) {
+        // 1. Kiểm tra thiết bị cũ
+        DynamoDBScanExpression scanExpression = new DynamoDBScanExpression();
+        Map<String, AttributeValue> eav = new HashMap<>();
+        eav.put(":uuid", new AttributeValue().withS(machineUuid));
+        scanExpression.withFilterExpression("machineUuid = :uuid").withExpressionAttributeValues(eav);
+
+        List<Device> existing = dynamoDBMapper.scan(Device.class, scanExpression);
+
+        if (!existing.isEmpty()) {
+            Device device = existing.get(0);
+            log.info("🔁 Existing device found for machineUuid '{}', returning deviceId '{}'", machineUuid, device.getDeviceId());
+            return device.getDeviceId();
+        }
+
+        // 2. Tạo thiết bị mới
+        String deviceId;
+        do {
+            deviceId = String.valueOf(100_000_000 + secureRandom.nextInt(900_000_000));
+        } while (dynamoDBMapper.load(Device.class, deviceId) != null);
+
         Device device = new Device();
         device.setDeviceId(deviceId);
         device.setDevicePassword(password);
         device.setDeviceName(deviceName);
-        device.setAllowRemote(true);
+        device.setMachineUuid(machineUuid);
+        device.setAllowRemote(false);
+        device.setConnectedAndroid(null);
+
         dynamoDBMapper.save(device);
+        log.info("🆕 Registered new device '{}', machineUuid='{}'", deviceId, machineUuid);
         return deviceId;
     }
 
     @Override
-    public boolean verify(String deviceId, String password) {
+    public boolean isValidCredential(String deviceId, String password) {
         Device device = dynamoDBMapper.load(Device.class, deviceId);
         return device != null && device.getDevicePassword().equals(password);
     }

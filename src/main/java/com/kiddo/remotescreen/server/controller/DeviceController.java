@@ -1,5 +1,6 @@
 package com.kiddo.remotescreen.server.controller;
 
+import com.kiddo.remotescreen.server.entity.Device;
 import com.kiddo.remotescreen.server.model.*;
 import com.kiddo.remotescreen.server.service.DeviceService;
 import org.springframework.http.HttpStatus;
@@ -18,16 +19,53 @@ public class DeviceController {
 
     @PostMapping("/register")
     public ResponseEntity<DeviceRegisterResponseDto> register(@RequestBody DeviceRegisterRequestDto request) {
-        String deviceId = deviceService.register(request.password(), request.deviceName());
+        String deviceId = deviceService.register(request.password(), request.deviceName(), request.machineUuid());
         return ResponseEntity.ok(new DeviceRegisterResponseDto(deviceId));
     }
 
-    @PostMapping("/verify")
-    public ResponseEntity<?> verify(@RequestBody DeviceAuthRequestDto request) {
-        boolean isValid = deviceService.verify(request.deviceId(), request.password());
-        return isValid ? ResponseEntity.ok().build()
-                : ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid device credentials");
+    @GetMapping("/status/{deviceId}")
+    public ResponseEntity<?> getDeviceStatus(@PathVariable String deviceId) {
+        Device device = deviceService.getDeviceById(deviceId);
+        if (device == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Device not found");
+        }
+
+        DeviceStatusDto status = new DeviceStatusDto(
+                Boolean.TRUE.equals(device.getAllowRemote()),
+                device.getConnectedAndroid()
+        );
+        return ResponseEntity.ok(status);
     }
+
+    @PostMapping("/connect-android")
+    public ResponseEntity<?> connectAndroid(@RequestBody DeviceConnectAndroidDto dto) {
+        Device device = deviceService.getDeviceById(dto.deviceId());
+        if (device == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Device ID not found");
+        }
+
+        if (!device.getDevicePassword().equals(dto.password())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Incorrect password");
+        }
+
+        if (!Boolean.TRUE.equals(device.getAllowRemote())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Remote access disabled");
+        }
+
+        if (deviceService.isDeviceBusy(dto.deviceId())) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body("Device is already in use");
+        }
+
+        deviceService.updateConnectedAndroid(dto.deviceId(), dto.androidDeviceName());
+
+        // ✅ Trả về cả deviceId và deviceName
+        return ResponseEntity.ok(new DeviceConnectResponseDto(
+                device.getDeviceId(),
+                device.getDeviceName()
+        ));
+    }
+
+
 
     @PutMapping("/remote-access")
     public ResponseEntity<?> updateRemoteAccess(@RequestBody DeviceRemoteAccessDto dto) {
@@ -43,20 +81,6 @@ public class DeviceController {
                 : ResponseEntity.status(HttpStatus.NOT_FOUND).body("Device not found");
     }
 
-    @PostMapping("/connect-android")
-    public ResponseEntity<?> connectAndroid(@RequestBody DeviceConnectAndroidDto dto) {
-        if (!deviceService.verify(dto.deviceId(), dto.password())) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials");
-        }
-        if (!deviceService.isAllowRemote(dto.deviceId())) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Remote access disabled");
-        }
-        if (deviceService.isDeviceBusy(dto.deviceId())) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body("Device is already in use");
-        }
-        deviceService.updateConnectedAndroid(dto.deviceId(), dto.androidDeviceName());
-        return ResponseEntity.ok().build();
-    }
 
     @PostMapping("/disconnect-android")
     public ResponseEntity<?> disconnectAndroid(@RequestParam String deviceId) {
