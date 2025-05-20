@@ -22,7 +22,7 @@ public class UserServiceImpl implements UserService {
     private final TokenService tokenService;
 
     public UserServiceImpl(DynamoDBMapper dynamoDBMapper, PasswordEncoder passwordEncoder,
-        TokenService tokenService) {
+                           TokenService tokenService) {
         this.dynamoDBMapper = dynamoDBMapper;
         this.passwordEncoder = passwordEncoder;
         this.tokenService = tokenService;
@@ -45,7 +45,7 @@ public class UserServiceImpl implements UserService {
 
         // Kiểm tra mật khẩu mới và xác nhận mật khẩu có khớp không
         if (!updatePasswordDto.newPassword().equals(updatePasswordDto.confirmPassword())) {
-            throw new RuntimeException("New password and confirm password do not match");
+            throw new RuntimeException("Password confirmation does not match");
         }
 
         // Mã hóa và cập nhật mật khẩu

@@ -37,14 +37,13 @@ public class AuthenticationController {
         return ResponseEntity.ok(response);
     }
 
-
     @GetMapping("/verify-email")
     public ResponseEntity<String> verifyEmail(@RequestParam Integer secret,
-        @RequestParam String email) {
+                                              @RequestParam String email) {
         authenticationService.verifyEmail(email, secret);
         return ResponseEntity.ok()
-            .contentType(MediaType.TEXT_HTML)
-            .body(HTML);
+                .contentType(MediaType.TEXT_HTML)
+                .body(HTML);
     }
 
     @PostMapping("/forgot-password")
@@ -55,7 +54,7 @@ public class AuthenticationController {
 
     @GetMapping("/reset-password")
     public ResponseEntity<String> resetPassword(@RequestParam Integer secret,
-        @RequestParam String email) {
+                                                @RequestParam String email) {
         authenticationService.resetPassword(email, secret);
         String htmlResponse = """
                 <!DOCTYPE html>
@@ -79,15 +78,15 @@ public class AuthenticationController {
                 </html>
             """;
         return ResponseEntity.ok()
-            .contentType(MediaType.TEXT_HTML)
-            .body(htmlResponse);
+                .contentType(MediaType.TEXT_HTML)
+                .body(htmlResponse);
     }
 
     private final String HTML = """
         <html>
           <head>
-            <title>Xác thực thành công</title>
-            <meta charset="UTF-8">
+            <title>Email Verification</title>
+            <meta charset=\"UTF-8\">
             <style>
               body {
                 display: flex;
@@ -112,8 +111,8 @@ public class AuthenticationController {
           </head>
           <body>
             <div class="message-box">
-              <h2>🎉 Đăng ký tài khoản thành công!</h2>
-              <p>Bạn có thể đăng nhập vào hệ thống ngay bây giờ.</p>
+              <h2>🎉 Active account successfully!</h2>
+              <p>Now you can log in.</p>
             </div>
           </body>
         </html>

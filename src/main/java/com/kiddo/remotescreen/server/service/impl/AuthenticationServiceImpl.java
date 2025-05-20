@@ -51,48 +51,47 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
     static final String SUBJECT = "Confirm Your Email Address";
 
-    // The HTML body for the email.
     private String getHtmlBody(String verificationLink) {
         return String.format(
-            "<!DOCTYPE html>"
-                + "<html lang='en'>"
-                + "<head>"
-                + "<meta charset='UTF-8'>"
-                + "<title>Email Confirmation</title>"
-                + "</head>"
-                + "<body>"
-                + "<h1>Confirm Your Email Address</h1>"
-                + "<p>Thank you for registering. Please click the link below to verify your email address:</p>"
-                + "<p><a href='%s' "
-                + "style='display: inline-block; padding: 10px 20px; background-color: #1a73e8; "
-                + "color: white; text-decoration: none; border-radius: 4px;'>Verify Email</a></p>"
-                + "<p>If you did not sign up for this account, you can ignore this email.</p>"
-                + "</body>"
-                + "</html>",
-            verificationLink
+                "<!DOCTYPE html>"
+                        + "<html lang='en'>"
+                        + "<head>"
+                        + "<meta charset='UTF-8'>"
+                        + "<title>Email Confirmation</title>"
+                        + "</head>"
+                        + "<body>"
+                        + "<h1>Confirm Your Email Address</h1>"
+                        + "<p>Thank you for registering. Please click the link below to verify your email address:</p>"
+                        + "<p><a href='%s' "
+                        + "style='display: inline-block; padding: 10px 20px; background-color: #1a73e8; "
+                        + "color: white; text-decoration: none; border-radius: 4px;'>Verify Email</a></p>"
+                        + "<p>If you did not sign up for this account, you can ignore this email.</p>"
+                        + "</body>"
+                        + "</html>",
+                verificationLink
         );
     }
 
     private String getHtmlBodyReset(String resetLink) {
         return String.format(
-            "<!DOCTYPE html>"
-                + "<html lang='en'>"
-                + "<head>"
-                + "<meta charset='UTF-8'>"
-                + "<title>Password Reset Request</title>"
-                + "</head>"
-                + "<body style='font-family: Arial, sans-serif; line-height: 1.6;'>"
-                + "<h2>Password Reset Request</h2>"
-                + "<p>We received a request to reset the password for your account.</p>"
-                + "<p>Click the button below to reset your password:</p>"
-                + "<p><a href='%s' "
-                + "style='display: inline-block; padding: 12px 24px; background-color: #d93025; "
-                + "color: white; text-decoration: none; border-radius: 4px;'>Reset Password</a></p>"
-                + "<p>If you did not request a password reset, you can safely ignore this email.</p>"
-                + "<p>Thank you,<br>The Support Team</p>"
-                + "</body>"
-                + "</html>",
-            resetLink
+                "<!DOCTYPE html>"
+                        + "<html lang='en'>"
+                        + "<head>"
+                        + "<meta charset='UTF-8'>"
+                        + "<title>Password Reset Request</title>"
+                        + "</head>"
+                        + "<body style='font-family: Arial, sans-serif; line-height: 1.6;'>"
+                        + "<h2>Password Reset Request</h2>"
+                        + "<p>We received a request to reset the password for your account.</p>"
+                        + "<p>Click the button below to reset your password:</p>"
+                        + "<p><a href='%s' "
+                        + "style='display: inline-block; padding: 12px 24px; background-color: #d93025; "
+                        + "color: white; text-decoration: none; border-radius: 4px;'>Reset Password</a></p>"
+                        + "<p>If you did not request a password reset, you can safely ignore this email.</p>"
+                        + "<p>Thank you,<br>The Support Team</p>"
+                        + "</body>"
+                        + "</html>",
+                resetLink
         );
     }
 
@@ -102,11 +101,10 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     @Value("${app.base-url}")
     private String baseUrl;
 
-
     public AuthenticationServiceImpl(DynamoDBMapper dynamoDBMapper, PasswordEncoder passwordEncoder,
-        AuthenticationManager authenticationManager,
-        AmazonSimpleEmailService amazonSimpleEmailService, JwtService jwtService,
-        TokenService tokenService) {
+                                     AuthenticationManager authenticationManager,
+                                     AmazonSimpleEmailService amazonSimpleEmailService, JwtService jwtService,
+                                     TokenService tokenService) {
         this.dynamoDBMapper = dynamoDBMapper;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
@@ -133,16 +131,16 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         var htmlBody = getHtmlBody(urlVerify);
         sendEmail(user.getEmail(),
-            "Click the link below to reset your password", htmlBody);
+                "Click the link below to reset your password", htmlBody);
     }
 
     @Override
     public LoginResponse authenticate(LoginUserDto input) {
         authenticationManager.authenticate(
-            new UsernamePasswordAuthenticationToken(
-                input.email(),
-                input.password()
-            )
+                new UsernamePasswordAuthenticationToken(
+                        input.email(),
+                        input.password()
+                )
         );
 
         User user = dynamoDBMapper.load(User.class, input.email());
@@ -171,7 +169,6 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             throw new RuntimeException("User not found with this email");
         }
 
-        // Kiểm tra secret
         if (!secret.equals(user.getSecret())) {
             throw new RuntimeException("Invalid secret code");
         }
@@ -180,7 +177,6 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         int secretNew = 100000 + random.nextInt(900000);
         user.setSecret(secretNew);
 
-        // Kích hoạt tài khoản
         user.setAction(AccountStatus.ACTIVE.name());
         dynamoDBMapper.save(user);
     }
@@ -194,7 +190,6 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             String authHeader = attr.getRequest().getHeader("Authorization");
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
                 String token = authHeader.substring(7);
-                // 5. Khóa token
                 tokenService.lockToken(new TokenDto(email, token));
             }
         }
@@ -231,24 +226,22 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         String newPassword = generateRandomPassword();
         Random random = new Random();
-        // Mã hóa và cập nhật mật khẩu mới
         user.setPassword(passwordEncoder.encode(newPassword));
         int secretNew = 100000 + random.nextInt(900000);
         user.setSecret(secretNew);
         dynamoDBMapper.save(user);
 
-        // Gửi email chứa mật khẩu mới
         String htmlBody = String.format(
-            "<!DOCTYPE html>"
-                + "<html lang='en'>"
-                + "<head><meta charset='UTF-8'><title>Password Reset</title></head>"
-                + "<body style='font-family: Arial, sans-serif;'>"
-                + "<h2>Your password has been reset</h2>"
-                + "<p>Your new temporary password is:</p>"
-                + "<p style='font-size: 20px; font-weight: bold;'>%s</p>"
-                + "<p>Please log in and change your password as soon as possible.</p>"
-                + "</body></html>",
-            newPassword
+                "<!DOCTYPE html>"
+                        + "<html lang='en'>"
+                        + "<head><meta charset='UTF-8'><title>Password Reset</title></head>"
+                        + "<body style='font-family: Arial, sans-serif;'>"
+                        + "<h2>Your password has been reset</h2>"
+                        + "<p>Your new temporary password is:</p>"
+                        + "<p style='font-size: 20px; font-weight: bold;'>%s</p>"
+                        + "<p>Please log in and change your password as soon as possible.</p>"
+                        + "</body></html>",
+                newPassword
         );
 
         sendEmail(email, "Your password has been reset", htmlBody);
@@ -256,20 +249,19 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
     @Async
     public void sendEmail(String toEmail, String emailMessage, String link) {
-
         try {
             SendEmailRequest request = new SendEmailRequest()
-                .withDestination(
-                    new Destination().withToAddresses(toEmail))
-                .withMessage(new Message()
-                    .withBody(new Body()
-                        .withHtml(new Content()
-                            .withCharset("UTF-8").withData(link))
-                        .withText(new Content()
-                            .withCharset("UTF-8").withData(emailMessage)))
-                    .withSubject(new Content()
-                        .withCharset("UTF-8").withData(SUBJECT)))
-                .withSource(fromEmail);
+                    .withDestination(
+                            new Destination().withToAddresses(toEmail))
+                    .withMessage(new Message()
+                            .withBody(new Body()
+                                    .withHtml(new Content()
+                                            .withCharset("UTF-8").withData(link))
+                                    .withText(new Content()
+                                            .withCharset("UTF-8").withData(emailMessage)))
+                            .withSubject(new Content()
+                                    .withCharset("UTF-8").withData(SUBJECT)))
+                    .withSource(fromEmail);
             amazonSimpleEmailService.sendEmail(request);
             logger.info("Email sent!");
             System.out.println("Email sent!");
